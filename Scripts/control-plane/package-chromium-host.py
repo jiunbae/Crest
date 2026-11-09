@@ -204,7 +204,7 @@ def main():
         if not args.product and is_product_framework:
             parser.error("Build CrestChromiumUI for a review package; this framework is the normal product composition")
     identity = (
-        "com.pauldavis.crest" if args.product
+        "com.jiun.crest" if args.product
         else "com.pauldavis.crest.chromium-baseline" if args.baseline
         else "com.pauldavis.crest.control-plane.chromium")
     product_entitlements = None
@@ -242,22 +242,33 @@ def main():
         else:
             granted_environment = "Development" in environments and push == "development"
             cloud_environment = "Development"
-        if (not team or application_id != expected_id or not expiration
-                or expiration.replace(tzinfo=timezone.utc) <= datetime.now(timezone.utc)
-                or container not in granted.get("com.apple.developer.icloud-container-identifiers", [])
-                or not granted_environment):
-            parser.error(f"The profile must grant {identity} CloudKit and push access")
-        service = granted.get("com.apple.developer.icloud-services", [])
-        if service != "*" and "CloudKit" not in service:
-            parser.error("The provisioning profile does not grant CloudKit")
-        cloud_entitlements = {
-            "com.apple.application-identifier": application_id,
-            "com.apple.developer.team-identifier": team,
-            "com.apple.developer.icloud-container-identifiers": [container],
-            "com.apple.developer.icloud-container-environment": cloud_environment,
-            "com.apple.developer.icloud-services": ["CloudKit"],
-            "com.apple.developer.aps-environment": push,
-        }
+        valid_profile = bool(team and application_id == expected_id and expiration
+            and expiration.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc))
+        if args.product and not container:
+            # Personal build without CloudKit: keep only the application
+            # identifier the Data Protection keychain needs.
+            if not valid_profile:
+                parser.error(f"The profile must grant {identity}")
+            cloud_entitlements = {
+                "com.apple.application-identifier": application_id,
+                "com.apple.developer.team-identifier": team,
+            }
+        else:
+            if (not valid_profile
+                    or container not in granted.get("com.apple.developer.icloud-container-identifiers", [])
+                    or not granted_environment):
+                parser.error(f"The profile must grant {identity} CloudKit and push access")
+            service = granted.get("com.apple.developer.icloud-services", [])
+            if service != "*" and "CloudKit" not in service:
+                parser.error("The provisioning profile does not grant CloudKit")
+            cloud_entitlements = {
+                "com.apple.application-identifier": application_id,
+                "com.apple.developer.team-identifier": team,
+                "com.apple.developer.icloud-container-identifiers": [container],
+                "com.apple.developer.icloud-container-environment": cloud_environment,
+                "com.apple.developer.icloud-services": ["CloudKit"],
+                "com.apple.developer.aps-environment": push,
+            }
     # APFS clones avoid another complete copy of Chromium's framework while
     # retaining independent files for signing. No input bundle is modified.
     output.parent.mkdir(parents=True, exist_ok=True)

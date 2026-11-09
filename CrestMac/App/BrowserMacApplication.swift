@@ -179,6 +179,7 @@ final class BrowserMacApplication {
             launchEnvironment.isolatedSoftwareUpdateFeedURL
         let softwareUpdates = BrowserSoftwareUpdateService(
             isEnabled: presentsInstalledApplicationUI
+                && Bundle.main.object(forInfoDictionaryKey: "CrestSoftwareUpdatesDisabled") as? Bool != true
                 && (!usesIsolatedLaunch || isolatedSoftwareUpdateFeed != nil),
             preferences: usesIsolatedLaunch ? nil : .standard,
             defaultChannel: isolatedSoftwareUpdateFeed.map { _ in .development },

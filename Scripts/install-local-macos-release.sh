@@ -10,9 +10,9 @@ set -euo pipefail
 repository_root="${0:A:h:h}"
 application_path="/Applications/Crest.app"
 repository="pauljoda/Crest"
-team_id="3U2R97HLXF"
+team_id="728FW73BS8"
 signing_identity="Developer ID Application"
-provisioning_profile="Crest Developer ID"
+provisioning_profile="Crest Jiun Developer ID"
 development_appcast_url="https://raw.githubusercontent.com/pauljoda/Crest/updates/appcast-development.xml"
 derived_data_path="${CREST_LOCAL_RELEASE_DERIVED_DATA:-$HOME/Library/Developer/Xcode/DerivedData/Crest-LocalRelease}"
 engine_cache_root="${CREST_ENGINE_CACHE:-$HOME/Library/Caches/Crest-local-release}"
@@ -190,9 +190,6 @@ xcodebuild -exportArchive \
 exported_entitlements="$release_root/exported-entitlements.plist"
 codesign -d --entitlements :- "$export_path/Crest.app" \
   > "$exported_entitlements" 2>/dev/null
-[[ "$(/usr/libexec/PlistBuddy -c \
-  'Print :com.apple.developer.icloud-container-environment' \
-  "$exported_entitlements")" == "Production" ]]
 if /usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$exported_entitlements" >/dev/null 2>&1; then
   print -u2 "The product entitlements must not enable the app sandbox; it would strand installed data."
   exit 1
@@ -238,7 +235,7 @@ CREST_DEFAULT_UPDATE_CHANNEL=development python3 Scripts/control-plane/package-c
 
 codesign --verify --deep --strict --verbose=2 "$built_application_path"
 [[ "$(defaults read "$built_application_path/Contents/Info" CFBundleIdentifier)" \
-  == "com.pauldavis.crest" ]]
+  == "com.jiun.crest" ]]
 [[ "$(defaults read "$built_application_path/Contents/Info" CFBundleVersion)" == "$build_number" ]]
 
 # Match only the installed app's own main executable, whatever it is named:

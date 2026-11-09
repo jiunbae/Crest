@@ -12,10 +12,10 @@
 	<string>Developer ID Application</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.pauldavis.crest</key>
-		<string>Crest Developer ID</string>
+		<key>com.jiun.crest</key>
+		<string>Crest Jiun Developer ID</string>
 	</dict>
 	<key>teamID</key>
-	<string>3U2R97HLXF</string>
+	<string>728FW73BS8</string>
 </dict>
 </plist>

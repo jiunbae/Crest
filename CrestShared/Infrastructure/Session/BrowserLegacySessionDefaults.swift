@@ -19,7 +19,7 @@ struct BrowserLegacySessionDefaults {
     static let journalKey = "crest.sync.journal.v1"
     /// The suite the sync journal moved to. Releases before the move kept it
     /// in the standard defaults.
-    static let journalSuiteName = "com.pauldavis.crest.sync-journal"
+    static let journalSuiteName = "com.jiun.crest.sync-journal"
 
     private let defaults: UserDefaults
     /// Where the journal may be, in the order the installed release looked.
