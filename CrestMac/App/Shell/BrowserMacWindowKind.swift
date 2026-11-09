@@ -45,7 +45,9 @@ struct BrowserMacWindowKind: Hashable {
             width: BrowserQuickWindowLayout.defaultWidth, height: BrowserQuickWindowLayout.defaultHeight),
         minimumContentSize: CGSize(
             width: BrowserQuickWindowLayout.minimumWidth, height: BrowserQuickWindowLayout.minimumHeight),
-        collectionBehavior: .moveToActiveSpace)
+        // The window has its own size and minimum; fitting it to content
+        // SwiftUI has not laid out yet only adds work to every link it opens.
+        sizingOptions: [], collectionBehavior: .moveToActiveSpace)
     /// Crest Setup, which fills the screen it opens on. The setup content is
     /// fully flexible above its minimum, so the window keeps the size it opens
     /// at rather than the content's ideal one, which is that minimum.

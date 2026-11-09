@@ -61,7 +61,11 @@ struct BrowserTranslationHost: ViewModifier {
             }
             .task(id: "\(translation.languageStatusID)-\(translation.isOffered)-\(isActive)-\(scenePhase)") {
                 guard isActive, translation.isOffered, scenePhase == .active else { return }
-                await translation.refreshInstalledLanguages(force: true)
+                // Only the language menu reads installed models. Wait out quick
+                // tab switching, which cancels this task, before asking Apple.
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                await translation.refreshInstalledLanguages()
             }
             .translationTask(configuration) { session in
                 await translation.run(using: session, configuration: configuration)

@@ -25,7 +25,11 @@ extension BrowserSettingsDestination {
 extension BrowserSettingsDestination {
     /// Every settings page as the command palette offers it: by its name,
     /// with its title and the words a person might type to find it.
-    static var palettePages: [PaletteSettingsPage] {
+    /// Built once: SwiftUI bodies rebuild the palette registry on every
+    /// update, and localizing every page each time showed up on Space switches.
+    static let palettePages: [PaletteSettingsPage] = makePalettePages()
+
+    private static func makePalettePages() -> [PaletteSettingsPage] {
         all.map {
             PaletteSettingsPage(
                 name: $0.name, title: String(localized: $0.title),

@@ -290,9 +290,10 @@ final class SpaceContentPagerView<Content: View & Equatable>: NSView {
                     }
                     host.hostingView.rootView = root
                     if previous == .inactive, contentPresentation != .inactive {
-                        // Admit the destination before moving its first frame
-                        // into view, without refreshing roots on progress ticks.
-                        host.hostingView.layoutSubtreeIfNeeded()
+                        // Admit the destination with the native display cycle,
+                        // which lays it out before the frame that shows it,
+                        // rather than rendering it inside the pager's update.
+                        host.hostingView.needsLayout = true
                     }
                 }
             } else {

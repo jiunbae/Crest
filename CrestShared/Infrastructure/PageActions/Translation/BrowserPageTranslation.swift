@@ -25,8 +25,18 @@ final class BrowserPageTranslation {
     @ObservationIgnored private var supportedLanguages = BrowserTranslationPreference.Languages.unloaded
     private(set) var installedLanguageIDs: Set<String> = []
     private(set) var downloadRevision = 0
-    @ObservationIgnored private var languageCheckID: String?
     @ObservationIgnored private var languageLoadTask: Task<BrowserTranslationPreference.Languages, Never>?
+    /// Apple's languages and installed models belong to the system, not to a
+    /// page, so every page reads one answer. Each `LanguageAvailability`
+    /// query costs Apple's framework several milliseconds on the main thread,
+    /// and checking every pair on each tab switch stalled the window.
+    private static var sharedLanguageLoad: Task<BrowserTranslationPreference.Languages, Never>?
+    private static var installedLanguageCache: [String: (ids: Set<String>, checkedAt: ContinuousClock.Instant)] = [:]
+    /// Advances whenever installed models may have changed, which makes every
+    /// page check again and drops answers from scans already under way.
+    private static var installedLanguageGeneration = 0
+    /// Models installed outside Crest, in System Settings, show up after this.
+    private static let installedLanguageCacheLifetime: Duration = .seconds(600)
 
     var downloadedLanguages: [Locale.Language] {
         languages.filter { installedLanguageIDs.contains($0.minimalIdentifier) }
@@ -205,9 +215,13 @@ final class BrowserPageTranslation {
         guard languages.isEmpty else { return }
         let load =
             languageLoadTask
+            ?? Self.sharedLanguageLoad
             ?? Task { await BrowserTranslationPreference.languages() }
         languageLoadTask = load
+        Self.sharedLanguageLoad = load
         let loaded = await load.value
+        // An empty answer may be Apple's service not yet ready; ask again later.
+        if loaded.all.isEmpty, Self.sharedLanguageLoad == load { Self.sharedLanguageLoad = nil }
         supportedLanguages = loaded
         languages = loaded.all.sorted {
             languageName($0.minimalIdentifier).localizedStandardCompare(languageName($1.minimalIdentifier))
@@ -221,20 +235,26 @@ final class BrowserPageTranslation {
 
     func refreshInstalledLanguages(force: Bool = false) async {
         await loadLanguages()
-        let check = languageStatusID
-        guard force || languageCheckID != check else { return }
-        languageCheckID = check
+        // The shared answer, while fresh, replaces asking Apple again; it
+        // expires so models changed outside Crest appear on a later visit.
+        let generation = Self.installedLanguageGeneration
+        let check = "\(languageStatusID)|\(generation)"
+        let cacheKey = "\(sourceID)|\(targetID)"
+        if !force, let cached = Self.installedLanguageCache[cacheKey],
+            cached.checkedAt.duration(to: .now) < Self.installedLanguageCacheLifetime
+        {
+            installedLanguageIDs = cached.ids
+            return
+        }
         let identifiers = languages.map(\.minimalIdentifier)
         // Apple reports installed pairs. A positive result confirms both
         // languages; unsupported/supported pairs do not prove either is absent.
         var pairs = identifiers.map { [$0, targetID] }
         if !sourceID.isEmpty { pairs += identifiers.map { [sourceID, $0] } }
         let installed = await Self.installedLanguages(in: pairs, supported: supportedLanguages)
-        guard !Task.isCancelled, check == languageStatusID else {
-            if languageCheckID == check { languageCheckID = nil }
-            return
-        }
+        guard !Task.isCancelled, check == "\(languageStatusID)|\(Self.installedLanguageGeneration)" else { return }
         installedLanguageIDs = installed
+        Self.installedLanguageCache[cacheKey] = (installed, .now)
     }
 
     private nonisolated static func installedLanguages(
@@ -371,6 +391,9 @@ final class BrowserPageTranslation {
                 self.session = nil
                 isAutomaticOperation = false
                 downloadRevision &+= 1
+                // A finished download can install a model any page lists.
+                Self.installedLanguageCache.removeAll()
+                Self.installedLanguageGeneration &+= 1
             }
         }
         do {
