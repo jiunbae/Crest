@@ -356,6 +356,7 @@ def main():
             if isinstance(value, str) and "$(" in value:
                 continue
             if (key.startswith("SU") or key.endswith("UsageDescription")
+                    or key == "CrestSoftwareUpdatesDisabled"
                     or key in ("CFBundleURLTypes", "CFBundleDocumentTypes")):
                 info[key] = value
         # Crest's Info.plist leaves the channel to its target's build setting;
