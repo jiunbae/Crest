@@ -6,7 +6,7 @@ extension PageChanged {
     /// change to it, so a change for a page the state does not hold is about
     /// one already removed and changes nothing.
     @MainActor func apply(to state: CoreState) {
-        state.pages[self.page.id]?.update(self.page)
+        state.updatePage(page)
     }
 
     @MainActor func apply(to core: CrestCore, in batch: inout CoreChangeBatch) {

@@ -29,7 +29,7 @@ extension CoreState {
     /// on one engine, which reads no page at all.
     func engineBadge(forTab tabID: UUID) -> EngineKind? {
         guard let badged = engines?.badged, !badged.isEmpty,
-            let page = pages.values.first(where: { $0.tabID == tabID && $0.phase.holdsEnginePage })
+            let page = pageHeld(forTab: tabID)
         else { return nil }
         return badged.contains(page.engine) ? page.engine : nil
     }

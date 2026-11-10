@@ -177,7 +177,113 @@ final class CoreReadModelTests: XCTestCase {
             })
     }
 
+    /// A tab queried before load must hear its page arrive, and both sides
+    /// of a reassignment must be stored before either side announces it.
+    func testTabPageSlotsStoreOwnershipBeforeAnnouncingIt() throws {
+        let state = CoreState()
+        let first = UUID()
+        let second = UUID()
+        let pageID = UUID()
+        let arrival = Announcement(reading: { state.pageHeld(forTab: first)?.id })
+        let dictionary = Announcement(reading: { state.pages[pageID]?.id })
+        PageOpened(page: pageValue(pageID, tabID: first)).apply(to: state)
+        XCTAssertEqual(try XCTUnwrap(arrival.seen), pageID)
+        XCTAssertEqual(try XCTUnwrap(dictionary.seen), pageID)
+        let page = try XCTUnwrap(state.pageHeld(forTab: first))
+
+        let leaves = Announcement(reading: { state.pageHeld(forTab: first)?.id })
+        let arrives = Announcement(reading: { state.pageHeld(forTab: second)?.id })
+        let otherSlotSeenFromDeparture = Announcement(reading: {
+            _ = state.pageHeld(forTab: first)
+            return state.pageHeld(forTab: second)?.id
+        })
+        PageChanged(page: pageValue(pageID, tabID: second)).apply(to: state)
+        XCTAssertNil(try XCTUnwrap(leaves.seen))
+        XCTAssertEqual(try XCTUnwrap(arrives.seen), pageID)
+        XCTAssertEqual(try XCTUnwrap(otherSlotSeenFromDeparture.seen), pageID)
+        XCTAssertTrue(state.pageHeld(forTab: second) === page)
+
+        let removal = Announcement(reading: { state.pageHeld(forTab: second)?.id })
+        PageRemoved(pageID: pageID).apply(to: state)
+        XCTAssertNil(try XCTUnwrap(removal.seen))
+        XCTAssertNil(state.pages[pageID])
+        // A removed tab keeps its empty slot so a later page still notifies it.
+        let returns = Announcement(reading: { state.pageHeld(forTab: second)?.id })
+        PageOpened(page: pageValue(pageID, tabID: second)).apply(to: state)
+        XCTAssertEqual(try XCTUnwrap(returns.seen), pageID)
+    }
+
+    /// Badge and failed-load labels follow their tab's live model, while
+    /// opening/removing another tab or transient page cannot dirty them.
+    func testTabPageChromeObservesOnlyItsOwnPages() throws {
+        let seed = TabState.Seed(title: "Kept title", url: URL(string: "https://kept.example/"), placement: .current)
+        let space = SpaceState.Seed(
+            id: UUID(), profileID: UUID(), name: "Pages", symbol: "globe", accent: .teal,
+            folders: [], tabs: [seed])
+        let store = BrowserStore(seed: SessionState.Seed(spaces: [space]))
+        let tab = try XCTUnwrap(store.spaceModel(space.id)?.shownTab(seed.id))
+        let state = CoreState()
+        state.engines = EngineRoster(engines: [], offered: [], badged: [.chromium])
+        let pageID = UUID()
+        PageOpened(page: pageValue(pageID, tabID: tab.id)).apply(to: state)
+        let readsChrome = {
+            _ = state.engineBadge(forTab: tab.id)
+            _ = tab.shownTitle(in: state)
+        }
+        let otherID = UUID()
+        XCTAssertFalse(
+            notifies(readsChrome) {
+                PageOpened(page: pageValue(otherID, tabID: UUID())).apply(to: state)
+            })
+        XCTAssertFalse(
+            notifies(readsChrome) {
+                PageRemoved(pageID: otherID).apply(to: state)
+            })
+        let transientID = UUID()
+        XCTAssertFalse(
+            notifies(readsChrome) {
+                PageOpened(page: pageValue(transientID, tabID: nil)).apply(to: state)
+            })
+        XCTAssertNil(state.pageHeld(forTab: UUID()))
+        XCTAssertTrue(
+            notifies(readsChrome) {
+                PageChanged(page: pageValue(pageID, tabID: tab.id, engine: .chromium)).apply(to: state)
+            })
+        XCTAssertEqual(state.engineBadge(forTab: tab.id), .chromium)
+        let failed = PageLiveState(
+            url: nil, pendingURL: nil, title: "", isLoading: false, canGoBack: false, canGoForward: false,
+            security: .none,
+            failure: PageFailure(
+                error: .cannotFindServer, url: "https://failed.example/", replacedDocument: true,
+                domain: "", code: 0),
+            media: [], address: "https://failed.example/")
+        XCTAssertTrue(
+            notifies(readsChrome) {
+                PageChanged(page: pageValue(pageID, tabID: tab.id, engine: .chromium, live: failed)).apply(to: state)
+            })
+        XCTAssertEqual(tab.shownTitle(in: state), "failed.example")
+        // A transient promoted to this tab becomes a candidate without relying
+        // on a global dictionary-membership notification.
+        PageChanged(page: pageValue(pageID, tabID: tab.id, phase: .closed)).apply(to: state)
+        XCTAssertNil(state.pageHeld(forTab: tab.id))
+        PageChanged(page: pageValue(transientID, tabID: tab.id)).apply(to: state)
+        XCTAssertEqual(state.pageHeld(forTab: tab.id)?.id, transientID)
+        PageRemoved(pageID: pageID).apply(to: state)
+        XCTAssertEqual(state.pageHeld(forTab: tab.id)?.id, transientID)
+        PageChanged(page: pageValue(transientID, tabID: nil)).apply(to: state)
+        XCTAssertNil(state.pageHeld(forTab: tab.id))
+    }
+
     // MARK: - Helpers
+
+    private func pageValue(
+        _ id: UUID, tabID: UUID?, engine: EngineKind = .webKit, phase: PagePhase = .live,
+        live: PageLiveState = .blank
+    ) -> PageState {
+        PageState(
+            id: id, workspaceID: UUID(), spaceID: UUID(), tabID: tabID,
+            engine: engine, phase: phase, live: live)
+    }
 
     /// Changes something with `change` and asserts that a reader told of the
     /// change, while it is announced, reads what `read` reads after it.

@@ -14,6 +14,34 @@ import Observation
 @MainActor
 @Observable
 final class CoreState {
+    // MARK: - Types
+
+    /// A tab keeps its slot even when it has no page, so a reader before load
+    /// hears its first page arrive without observing other tabs' pages.
+    @Observable @MainActor
+    fileprivate final class TabPageSlot {
+        // MARK: - Variables
+
+        var candidates: [PageStateModel] {
+            access(keyPath: \.candidates)
+            return candidatesStorage
+        }
+        @ObservationIgnored private var candidatesStorage: [PageStateModel] = []
+
+        // MARK: - Actions - Changes
+
+        /// All affected slots are stored before any of them announces a change.
+        func store(_ candidates: [PageStateModel]) -> Bool {
+            guard !candidatesStorage.elementsEqual(candidates, by: { $0 === $1 }) else { return false }
+            candidatesStorage = candidates
+            return true
+        }
+
+        func announceChange() {
+            withMutation(keyPath: \.candidates) {}
+        }
+    }
+
     // MARK: - Variables
 
     /// Each workspace attached to this device, by workspace. The dictionary
@@ -37,6 +65,7 @@ final class CoreState {
     /// page opens or goes, so a page's new title redraws only its readers.
     var pages: [UUID: PageStateModel] { observed(\.pagesStorage, as: \.pages) }
     @ObservationIgnored var pagesStorage: [UUID: PageStateModel] = [:]
+    @ObservationIgnored private var tabPageSlots: [UUID: TabPageSlot] = [:]
     /// The engines this device registered, with what each supports and which
     /// one new pages open on, as the core last published them. Nil until an
     /// engine registers.
@@ -208,6 +237,71 @@ final class CoreState {
         observed(\.spaceAccessStorage, as: \.spaceAccess)
     }
     @ObservationIgnored var spaceAccessStorage: [BrowserSpaceRuntimeAssignment: SpaceLockChanged] = [:]
+
+    // MARK: - Actions - Tab pages
+
+    /// The page a tab's chrome reads, without observing the device's whole
+    /// page dictionary. Keep every candidate: a closing or failed page can
+    /// coexist with the tab's replacement while the engine changes it.
+    func pageHeld(forTab tabID: UUID) -> PageStateModel? {
+        tabPageSlot(tabID).candidates.first { $0.tabID == tabID && $0.phase.holdsEnginePage }
+    }
+
+    /// Stores both the dictionary and affected tab slots before announcing
+    /// either, so a reader reached through either path sees the new membership.
+    func openPage(_ value: PageState) {
+        let previousTabID = pagesStorage[value.id]?.tabID
+        pagesStorage[value.id] = PageStateModel(value)
+        let changed = storeTabPages(for: Set([previousTabID, value.tabID].compactMap { $0 }))
+        withMutation(keyPath: \.pages) {}
+        for slot in changed { slot.announceChange() }
+    }
+
+    func removePage(_ pageID: UUID) {
+        guard let removed = pagesStorage.removeValue(forKey: pageID) else { return }
+        let changed = storeTabPages(for: Set([removed.tabID].compactMap { $0 }))
+        withMutation(keyPath: \.pages) {}
+        for slot in changed { slot.announceChange() }
+    }
+
+    /// Page changes retain their model. A promotion or reassignment changes
+    /// slot membership before the model's own fields announce their updates.
+    func updatePage(_ value: PageState) {
+        guard let page = pagesStorage[value.id] else { return }
+        let previousTabID = page.tabID
+        let changed =
+            previousTabID == value.tabID
+            ? []
+            : storeTabPages(
+                for: Set([previousTabID, value.tabID].compactMap { $0 }), assigning: page, to: value.tabID)
+        page.update(value)
+        for slot in changed { slot.announceChange() }
+    }
+
+    private func tabPageSlot(_ tabID: UUID) -> TabPageSlot {
+        if let slot = tabPageSlots[tabID] { return slot }
+        let slot = TabPageSlot()
+        tabPageSlots[tabID] = slot
+        return slot
+    }
+
+    /// Builds only affected slots, using the incoming owner while a model's
+    /// tabID still holds its previous value. Nil owners are transient pages.
+    private func storeTabPages(
+        for tabIDs: Set<UUID>, assigning page: PageStateModel? = nil, to tabID: UUID? = nil
+    ) -> [TabPageSlot] {
+        var changed: [TabPageSlot] = []
+        for affectedTabID in tabIDs {
+            let candidates = pagesStorage.values.filter { candidate in
+                if let page, candidate === page { return tabID == affectedTabID }
+                return candidate.tabID == affectedTabID
+            }
+            let slot = tabPageSlot(affectedTabID)
+            if slot.store(candidates) { changed.append(slot) }
+        }
+        return changed
+    }
+
 }
 
 extension CoreState: BrowserStoreFirstObservable {}
