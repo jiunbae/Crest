@@ -257,29 +257,27 @@ final class BrowserPageTranslation {
         Self.installedLanguageCache[cacheKey] = (installed, .now)
     }
 
+    /// Asks Apple about each pair in turn, pausing between questions. Apple
+    /// answers each one with ~13 ms of work on the main queue; asked four at a
+    /// time, those answers landed in bursts that stalled tab switches. Asking
+    /// one at a time spaces that work out; it does not guarantee every frame.
     private nonisolated static func installedLanguages(
         in pairs: [[String]], supported: BrowserTranslationPreference.Languages
     ) async -> Set<String> {
-        await withTaskGroup(of: [String].self, returning: Set<String>.self) { group in
-            var iterator = pairs.makeIterator()
-            func enqueue(_ pair: [String]) {
-                group.addTask {
-                    guard !Task.isCancelled, !pair[0].isEmpty, !pair[1].isEmpty else { return [] }
-                    let lowLatency = supported.usesLowLatency(from: pair[0], to: pair[1])
-                    let status = await BrowserTranslationPreference.languageAvailability(lowLatency: lowLatency).status(
-                        from: .init(identifier: pair[0]), to: .init(identifier: pair[1]))
-                    return status == .installed ? pair : []
-                }
-            }
-            for _ in 0..<4 { if let pair = iterator.next() { enqueue(pair) } }
-            var installed: Set<String> = []
-            for await pair in group {
-                installed.formUnion(pair)
-                if !Task.isCancelled, let next = iterator.next() { enqueue(next) }
-            }
-            return installed
+        var installed: Set<String> = []
+        for (index, pair) in pairs.enumerated() {
+            if index > 0 { try? await Task.sleep(for: installedLanguagePause) }
+            guard !Task.isCancelled else { break }
+            guard !pair[0].isEmpty, !pair[1].isEmpty else { continue }
+            let lowLatency = supported.usesLowLatency(from: pair[0], to: pair[1])
+            let status = await BrowserTranslationPreference.languageAvailability(lowLatency: lowLatency).status(
+                from: .init(identifier: pair[0]), to: .init(identifier: pair[1]))
+            if status == .installed { installed.formUnion(pair) }
         }
+        return installed
     }
+
+    private nonisolated static let installedLanguagePause: Duration = .milliseconds(24)
 
     func present() {
         isManuallyPresented = true
