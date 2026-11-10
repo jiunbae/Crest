@@ -5253,6 +5253,10 @@
     "alternate-command-shortcuts": {
       "category": "new",
       "message": "Assign an alternate keyboard shortcut to a command while keeping its primary shortcut"
+    },
+    "faster-tab-switching": {
+      "category": "improved",
+      "message": "Switch tabs with less delay, especially while a tab plays media"
     }
   }
 }

@@ -126,8 +126,6 @@ struct BrowserFolderOffscreenPlaceholder: ViewModifier {
                 for: BrowserFolderRuntimeAssignment(
                     folderID: folder.id, spaceID: context.space.id, profileID: context.space.profileID)
             ).state
-            // Residency is invisible to Observation unless its revision is read.
-            _ = context.pageAccess.residencyRevision()
             guard let keptTabID = state.keptTabID, context.pageAccess.containsResidentPage(keptTabID) else {
                 return nil
             }

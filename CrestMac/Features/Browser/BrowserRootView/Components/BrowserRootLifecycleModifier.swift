@@ -90,8 +90,9 @@ private struct BrowserRootPageMetadataObserver: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: model.browser.shownTab?.url) { model.synchronizePageMetadata() }
-            .onChange(of: model.pages.activePage?.live.displayURL) {
+            // One observer for both sources: a tab switch moves them together,
+            // and synchronizing twice in one update reads the page twice.
+            .onChange(of: [model.browser.shownTab?.url, model.pages.activePage?.live.displayURL?.absoluteString]) {
                 model.synchronizePageMetadata()
             }
     }

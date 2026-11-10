@@ -135,9 +135,7 @@ struct BrowserRootShell: View, BrowserChromeAnimating {
         }
         .ignoresSafeArea(.container, edges: .top)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .onChange(of: revealsSidebarOverFullscreenPage, initial: true) { _, reveals in
-            model.fullscreenSidebarRevealChanged(reveals)
-        }
+        .modifier(BrowserRootFullscreenRevealObserver(model: model, isEnabled: revealsSidebarInFullscreen))
         .onChange(of: transientBrowsing.orphanedPeeks(in: model.browser), initial: true) {
             transientBrowsing.reconcilePeeks(in: model.browser)
         }
@@ -183,10 +181,6 @@ struct BrowserRootShell: View, BrowserChromeAnimating {
                 reduceMotion: reduceMotion
             )
         }
-    }
-
-    private var revealsSidebarOverFullscreenPage: Bool {
-        revealsSidebarInFullscreen && model.pages.activePage?.isContentFullscreen == true
     }
 
     private var sidebarSurface: some View {
@@ -281,6 +275,22 @@ private struct BrowserRootPermissionObserver: ViewModifier {
             if model.pages.activePage?.sitePermissionRequests.current != nil {
                 model.presentFloatingSidebar(reduceMotion: reduceMotion)
             }
+        }
+    }
+}
+
+/// Follows whether the sidebar reveals over a full-screen page. It reads the
+/// active page, which changes with every tab switch, so it observes here
+/// rather than in the shell, whose whole body would otherwise run again.
+private struct BrowserRootFullscreenRevealObserver: ViewModifier {
+    let model: BrowserRootModel
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        content.onChange(
+            of: isEnabled && model.pages.activePage?.isContentFullscreen == true, initial: true
+        ) { _, reveals in
+            model.fullscreenSidebarRevealChanged(reveals)
         }
     }
 }

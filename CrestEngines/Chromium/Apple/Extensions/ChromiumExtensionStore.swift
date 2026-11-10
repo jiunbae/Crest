@@ -68,6 +68,11 @@ final class ChromiumExtensionStore {
     private(set) var installation: ChromiumExtensionInstallation?
     /// Each profile's extension icons, as the engine last answered them.
     @ObservationIgnored private var icons: [UUID: [String: NSImage]] = [:]
+    /// Each profile's pinned actions, as the engine last answered them. Kept
+    /// and dropped with `icons`: a Space's strip redraws whenever its window's
+    /// page changes, and asking the engine again on every tab switch costs a
+    /// synchronous round trip for an answer that only a refresh changes.
+    @ObservationIgnored private var pinned: [UUID: [ExtensionAction]] = [:]
     /// The extensions an import brought that still wait to install.
     @ObservationIgnored private var pendingImports: [ImportExtensionInstall] = []
     @ObservationIgnored private var importsTask: Task<Void, Never>?
@@ -134,8 +139,9 @@ final class ChromiumExtensionStore {
 
     /// The engine changed something the toolbar or the extension list shows.
     func refresh() {
-        revision &+= 1
         icons = [:]
+        pinned = [:]
+        revision &+= 1
     }
     /// The engine changed something `profileID`'s Space shows. Refreshes only
     /// that Space, at once when it was last refreshed longer ago than
@@ -162,8 +168,12 @@ final class ChromiumExtensionStore {
         if icons.keys.contains(where: { !profiles.contains($0) }) {
             icons = icons.filter { profiles.contains($0.key) }
         }
+        if pinned.keys.contains(where: { !profiles.contains($0) }) {
+            pinned = pinned.filter { profiles.contains($0.key) }
+        }
         for profileID in due {
             icons[profileID] = nil
+            pinned[profileID] = nil
             profileRevision(profileID).value &+= 1
         }
         refreshWindow = Task { [weak self] in
@@ -182,6 +192,16 @@ final class ChromiumExtensionStore {
     private func observeChanges(of profileID: UUID?) {
         _ = revision
         if let profileID { _ = profileRevision(profileID).value }
+    }
+
+    /// The profile's pinned actions, asking the engine only when no answer is
+    /// kept. An empty answer is not kept: a profile the engine has not loaded
+    /// yet answers nothing, and its row must ask again once it has.
+    private func pinnedActions(in profileID: UUID, pages: NativeEnginePages) -> [ExtensionAction] {
+        if let kept = pinned[profileID] { return kept }
+        let actions = pages.request(PinnedExtensions(profileID: profileID)).actions
+        if !actions.isEmpty { pinned[profileID] = actions }
+        return actions
     }
 
     private func icon(_ extensionID: String, in profileID: UUID) -> NSImage? {
@@ -219,7 +239,7 @@ final class ChromiumExtensionStore {
         let live = Dictionary(
             page?.extensions.map { ($0.id, $0) } ?? [],
             uniquingKeysWith: { first, _ in first })
-        return pages.request(PinnedExtensions(profileID: space.profileID)).actions
+        return pinnedActions(in: space.profileID, pages: pages)
             .map { action -> BrowserExtensionActionPresentation in
                 if let tab = live[action.id] {
                     return BrowserExtensionActionPresentation(

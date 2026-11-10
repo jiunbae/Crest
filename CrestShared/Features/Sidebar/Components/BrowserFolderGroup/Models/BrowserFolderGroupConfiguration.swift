@@ -115,14 +115,11 @@ struct BrowserFolderGroupConfiguration {
         folderTabIDs.first { context.window.shownTabIDs.contains($0) }
     }
 
+    /// The folder's tabs holding a page. Reading it observes these tabs'
+    /// slots of web residency, so a web page loading elsewhere leaves the
+    /// folder be; native tabs are still observed as one set.
     var residentFolderTabIDs: [UUID] {
         folderTabIDs.filter { pageAccess.containsResidentPage($0) }
-    }
-
-    /// Read inside the body so Observation tracks residency, which is
-    /// otherwise invisible to it.
-    var residencyRevision: Int {
-        pageAccess.residencyRevision()
     }
 
     /// The tab the folder keeps on screen in place of its contents, while that

@@ -132,7 +132,7 @@ private struct BrowserFolderCollapsedVisibilityUpdates: ViewModifier {
                 // the retained host updates folders while these views are absent.
                 .onChange(of: interaction.isExpanded.wrappedValue, initial: true) { _, _ in reconcileVisibility() }
                 .onChange(of: configuration.shownFolderTabID) { _, _ in reconcileVisibility() }
-                .onChange(of: configuration.residencyRevision, initial: true) { _, _ in reconcileVisibility() }
+                .onChange(of: configuration.residentFolderTabIDs, initial: true) { _, _ in reconcileVisibility() }
         #else
             content
                 .onChange(
@@ -152,7 +152,7 @@ private struct BrowserFolderCollapsedVisibilityUpdates: ViewModifier {
                         folderTabIDs: configuration.folderTabIDs
                     )
                 }
-                .onChange(of: configuration.residencyRevision, initial: true) { _, _ in
+                .onChange(of: configuration.residentFolderTabIDs, initial: true) { _, _ in
                     interaction.collapsedTabVisibility.wrappedValue.residencyDidChange(
                         isExpanded: interaction.isExpanded.wrappedValue,
                         selectedTabID: configuration.shownFolderTabID,

@@ -233,7 +233,7 @@ private struct BrowserSidebarSelectionReconciler: View {
             isSavedTabsExpanded: space.settings.isSavedTabsExpanded,
             isSelected: context.window.shownSpaceID == space.id,
             isUnlocked: !context.spaceAccess.isLocked(space),
-            residencyRevision: context.pageAccess.residencyRevision(),
+            residentTabIDs: listed.filter { context.pageAccess.containsResidentPage($0) },
             spaceIDs: context.browser.workspaceModel?.spaces.models.map(\.id) ?? [])
     }
 
@@ -248,7 +248,9 @@ private struct BrowserSidebarSelectionReconciler: View {
         let isSavedTabsExpanded: Bool
         let isSelected: Bool
         let isUnlocked: Bool
-        let residencyRevision: Int
+        /// The listed tabs holding a page, read slot by slot so a web page
+        /// loading in another Space does not wake this one.
+        let residentTabIDs: [UUID]
         /// Evicted Space hosts still need their retained visibility pruned when
         /// Spaces disappear or access is revoked.
         let spaceIDs: [UUID]
