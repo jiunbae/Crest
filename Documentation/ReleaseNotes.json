@@ -5257,6 +5257,10 @@
     "faster-tab-switching": {
       "category": "improved",
       "message": "Switch tabs with less delay, especially while a tab plays media"
+    },
+    "lighter-tab-switch-redraws": {
+      "category": "improved",
+      "message": "Switch tabs faster by redrawing only the parts of the sidebar that change"
     }
   }
 }
