@@ -32,6 +32,12 @@ final class BrowserPageTranslation {
     /// and checking every pair on each tab switch stalled the window.
     private static var sharedLanguageLoad: Task<BrowserTranslationPreference.Languages, Never>?
     private static var installedLanguageCache: [String: (ids: Set<String>, checkedAt: ContinuousClock.Instant)] = [:]
+    /// Scans under way, by language pair and generation. A scan belongs to
+    /// the system's answer, not to the page that started it: leaving the
+    /// page no longer throws away the questions already asked, so a person
+    /// moving between pages pays for one scan instead of a fresh partial one
+    /// on every visit.
+    private static var installedLanguageScans: [String: Task<Set<String>, Never>] = [:]
     /// Advances whenever installed models may have changed, which makes every
     /// page check again and drops answers from scans already under way.
     private static var installedLanguageGeneration = 0
@@ -246,15 +252,30 @@ final class BrowserPageTranslation {
             installedLanguageIDs = cached.ids
             return
         }
-        let identifiers = languages.map(\.minimalIdentifier)
-        // Apple reports installed pairs. A positive result confirms both
-        // languages; unsupported/supported pairs do not prove either is absent.
-        var pairs = identifiers.map { [$0, targetID] }
-        if !sourceID.isEmpty { pairs += identifiers.map { [sourceID, $0] } }
-        let installed = await Self.installedLanguages(in: pairs, supported: supportedLanguages)
+        let scanKey = "\(cacheKey)|\(generation)"
+        let scan: Task<Set<String>, Never>
+        if !force, let running = Self.installedLanguageScans[scanKey] {
+            scan = running
+        } else {
+            let identifiers = languages.map(\.minimalIdentifier)
+            // Apple reports installed pairs. A positive result confirms both
+            // languages; unsupported/supported pairs do not prove either is absent.
+            var pairs = identifiers.map { [$0, targetID] }
+            if !sourceID.isEmpty { pairs += identifiers.map { [sourceID, $0] } }
+            let supported = supportedLanguages
+            scan = Task {
+                let installed = await Self.installedLanguages(in: pairs, supported: supported)
+                if generation == Self.installedLanguageGeneration {
+                    Self.installedLanguageCache[cacheKey] = (installed, .now)
+                }
+                Self.installedLanguageScans[scanKey] = nil
+                return installed
+            }
+            Self.installedLanguageScans[scanKey] = scan
+        }
+        let installed = await scan.value
         guard !Task.isCancelled, check == "\(languageStatusID)|\(Self.installedLanguageGeneration)" else { return }
         installedLanguageIDs = installed
-        Self.installedLanguageCache[cacheKey] = (installed, .now)
     }
 
     /// Asks Apple about each pair in turn, pausing between questions. Apple
@@ -265,12 +286,16 @@ final class BrowserPageTranslation {
         in pairs: [[String]], supported: BrowserTranslationPreference.Languages
     ) async -> Set<String> {
         var installed: Set<String> = []
+        // One availability per model for the whole scan: each new one makes
+        // Apple rebuild its supported pairs on the main queue.
+        let general = BrowserTranslationPreference.languageAvailability(lowLatency: false)
+        let lowLatencyAvailability = BrowserTranslationPreference.languageAvailability(lowLatency: true)
         for (index, pair) in pairs.enumerated() {
             if index > 0 { try? await Task.sleep(for: installedLanguagePause) }
             guard !Task.isCancelled else { break }
             guard !pair[0].isEmpty, !pair[1].isEmpty else { continue }
             let lowLatency = supported.usesLowLatency(from: pair[0], to: pair[1])
-            let status = await BrowserTranslationPreference.languageAvailability(lowLatency: lowLatency).status(
+            let status = await (lowLatency ? lowLatencyAvailability : general).status(
                 from: .init(identifier: pair[0]), to: .init(identifier: pair[1]))
             if status == .installed { installed.formUnion(pair) }
         }
@@ -391,6 +416,8 @@ final class BrowserPageTranslation {
                 downloadRevision &+= 1
                 // A finished download can install a model any page lists.
                 Self.installedLanguageCache.removeAll()
+                Self.installedLanguageScans.values.forEach { $0.cancel() }
+                Self.installedLanguageScans.removeAll()
                 Self.installedLanguageGeneration &+= 1
             }
         }
