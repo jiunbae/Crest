@@ -14,9 +14,11 @@ struct BrowserShortcutList: View {
                             BrowserShortcutRow(
                                 command: command,
                                 shortcut: model.shortcut(for: command),
+                                alternate: model.alternateShortcut(for: command),
                                 isCustomized: model.isCustomized(command),
                                 preference: model.choosesPreference(command) ? model.preference(for: command) : nil,
                                 record: { model.record($0, for: command) },
+                                recordAlternate: { model.record($0, for: command, isAlternate: true) },
                                 choose: { model.choose($0, for: command) },
                                 reset: { model.reset(command) },
                                 reportInvalidShortcut:
@@ -50,11 +52,13 @@ private struct BrowserShortcutRow: View {
 
     let command: ShortcutCommand
     let shortcut: BrowserShortcut?
+    let alternate: BrowserShortcut?
     let isCustomized: Bool
     /// Who answers the keys while a focused page uses them too, or nil for a
     /// command that keeps its own.
     let preference: ShortcutPreference?
     let record: (BrowserShortcut?) -> Void
+    let recordAlternate: (BrowserShortcut?) -> Void
     let choose: (ShortcutPreference) -> Void
     let reset: () -> Void
     let reportInvalidShortcut: () -> Void
@@ -71,17 +75,17 @@ private struct BrowserShortcutRow: View {
                     .accessibilityHidden(true)
             }
 
-            BrowserShortcutRecorder(
-                identifier: command.name,
-                title: command.title(locale: locale),
-                shortcut: shortcut,
-                record: record,
-                reportInvalidShortcut: reportInvalidShortcut
-            )
-            .frame(
-                width: BrowserShortcutSettingsMetrics.recorderWidth,
-                height: BrowserShortcutSettingsMetrics.recorderHeight
-            )
+            VStack(alignment: .trailing) {
+                recorder(shortcut, title: command.title(locale: locale), identifier: command.name, record: record)
+                HStack {
+                    Text("Alternate")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    recorder(
+                        alternate, title: String(localized: "Alternate shortcut for \(command.title(locale: locale))"),
+                        identifier: command.name + "-alternate", record: recordAlternate)
+                }
+            }
 
             Menu {
                 Group {
@@ -92,6 +96,8 @@ private struct BrowserShortcutRow: View {
                         record(nil)
                     }
                     .disabled(shortcut == nil)
+                    Button("Clear Alternate Shortcut", systemImage: "delete.left") { recordAlternate(nil) }
+                        .disabled(alternate == nil)
                     Button(
                         BrowserShortcutSettingsPresentation.resetToDefault,
                         systemImage: "arrow.counterclockwise",
@@ -128,6 +134,19 @@ private struct BrowserShortcutRow: View {
             BrowserShortcutSettingsMetrics.rowVerticalPadding
         )
         .accessibilityElement(children: .contain)
+    }
+
+    private func recorder(
+        _ shortcut: BrowserShortcut?, title: String, identifier: String,
+        record: @escaping (BrowserShortcut?) -> Void
+    ) -> some View {
+        BrowserShortcutRecorder(
+            identifier: identifier, title: title, shortcut: shortcut, record: record,
+            reportInvalidShortcut: reportInvalidShortcut
+        )
+        .frame(
+            width: BrowserShortcutSettingsMetrics.recorderWidth,
+            height: BrowserShortcutSettingsMetrics.recorderHeight)
     }
 
     /// The menu's choice of who answers the keys while a focused page uses

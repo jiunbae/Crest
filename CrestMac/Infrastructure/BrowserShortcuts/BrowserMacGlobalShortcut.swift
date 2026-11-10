@@ -1,7 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// The keys bound to one command, registered with the system so they reach
+/// Both chords bound to one command, registered with the system so they reach
 /// Crest while another app is in front. The registration follows the binding
 /// as it changes, and the keyboard layout as it switches, for as long as
 /// Crest runs; a binding no key on the layout types registers nothing. While
@@ -16,17 +16,17 @@ final class BrowserMacGlobalShortcut {
 
     // MARK: - Variables
 
-    private let binding: @MainActor () -> BrowserShortcut?
+    private let bindings: @MainActor () -> [BrowserShortcut]
     private let pressed: @MainActor () -> Void
-    private var hotKey: EventHotKeyRef?
+    private var hotKeys: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var observers: [any NSObjectProtocol] = []
 
     // MARK: - Initializers
 
     /// A shortcut on the keys `binding` answers, which runs `pressed`.
-    init(binding: @escaping @MainActor () -> BrowserShortcut?, pressed: @escaping @MainActor () -> Void) {
-        self.binding = binding
+    init(bindings: @escaping @MainActor () -> [BrowserShortcut], pressed: @escaping @MainActor () -> Void) {
+        self.bindings = bindings
         self.pressed = pressed
     }
 
@@ -68,18 +68,24 @@ final class BrowserMacGlobalShortcut {
     }
 
     private func register() {
-        if let hotKey { UnregisterEventHotKey(hotKey) }
-        hotKey = nil
-        // Shift alone would take an ordinary typed character from every app.
-        guard let shortcut = binding(), !NSApp.isActive,
-            !shortcut.modifiers.isDisjoint(with: [.command, .control, .option]),
-            let keyCode = shortcut.key.virtualKeyCode(shifted: shortcut.modifiers.contains(.shift))
-        else { return }
-        let status = RegisterEventHotKey(
-            UInt32(keyCode), shortcut.modifiers.carbonModifiers, EventHotKeyID(signature: Self.signature, id: 1),
-            GetApplicationEventTarget(), 0, &hotKey)
-        // If registration fails, the shortcut still works inside Crest.
-        if status != noErr { DiagnosticLog.shortcuts.notice("Could not register a global shortcut: \(status)") }
+        for hotKey in hotKeys { UnregisterEventHotKey(hotKey) }
+        hotKeys.removeAll()
+        let shortcuts = bindings()
+        guard !NSApp.isActive else { return }
+        for (index, shortcut) in shortcuts.enumerated() {
+            // Shift alone would take an ordinary typed character from every app.
+            guard !shortcut.modifiers.isDisjoint(with: [.command, .control, .option]),
+                let keyCode = shortcut.key.virtualKeyCode(shifted: shortcut.modifiers.contains(.shift))
+            else { continue }
+            var hotKey: EventHotKeyRef?
+            let status = RegisterEventHotKey(
+                UInt32(keyCode), shortcut.modifiers.carbonModifiers,
+                EventHotKeyID(signature: Self.signature, id: UInt32(index + 1)),
+                GetApplicationEventTarget(), 0, &hotKey)
+            if let hotKey { hotKeys.append(hotKey) }
+            // If registration fails, the shortcut still works inside Crest.
+            if status != noErr { DiagnosticLog.shortcuts.notice("Could not register a global shortcut: \(status)") }
+        }
     }
 }
 

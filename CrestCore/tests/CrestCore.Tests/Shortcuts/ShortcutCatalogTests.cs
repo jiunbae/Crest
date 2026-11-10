@@ -91,4 +91,39 @@ public sealed class ShortcutCatalogTests {
         Assert.Null(bindings["mostRecentTabBackward"].Keys);
         Assert.NotNull(ShortcutCommand.MostRecentTabBackward.DefaultShortcut(DevicePlatform.Mobile));
     }
+    [Fact]
+    public void EachChordKeepsItsOwnEditingPolicyAndDuplicateChordsCollapse() {
+        var primary = Key("z", ShortcutChord.Command);
+        var alternate = ShortcutChord.Special("f12", 0);
+        var overrides = ShortcutOverrides.None.Assigning(ShortcutCommand.ShowHistory, primary, Offered, DevicePlatform.Desktop)
+            .AssigningAlternate(ShortcutCommand.ShowHistory, alternate, Offered, DevicePlatform.Desktop)
+            .Preferring(ShortcutCommand.ShowHistory, ShortcutPreference.PreferCrest);
+        var binding = overrides.Bindings(Offered, DevicePlatform.Desktop).Single(value => value.Command == ShortcutCommand.ShowHistory);
+        Assert.True(binding.YieldsToTextEditing);
+        Assert.Equal(ShortcutPreference.PreferWebsite, binding.Preference);
+        Assert.False(binding.Alternate!.YieldsToTextEditing);
+        Assert.Equal(ShortcutPreference.PreferCrest, binding.Alternate.Preference);
+        var swapped = overrides.Assigning(ShortcutCommand.ShowHistory, alternate, Offered, DevicePlatform.Desktop)
+            .AssigningAlternate(ShortcutCommand.ShowHistory, primary, Offered, DevicePlatform.Desktop);
+        binding = swapped.Bindings(Offered, DevicePlatform.Desktop).Single(value => value.Command == ShortcutCommand.ShowHistory);
+        Assert.False(binding.YieldsToTextEditing);
+        Assert.True(binding.Alternate!.YieldsToTextEditing);
+        Assert.Equal(ShortcutPreference.PreferWebsite, binding.Alternate.Preference);
+        var duplicate = swapped.AssigningAlternate(ShortcutCommand.ShowHistory, alternate, Offered, DevicePlatform.Desktop);
+        Assert.Null(duplicate.Bindings(Offered, DevicePlatform.Desktop).Single(value => value.Command == ShortcutCommand.ShowHistory).Alternate);
+    }
+
+    [Fact]
+    public void LaterDefaultsYieldToRestoredAlternatesAndUnknownAlternatesSurviveChanges() {
+        var keys = ShortcutChord.Of(ShortcutCommand.MostRecentTabBackward.DefaultShortcut(DevicePlatform.Desktop)!.Keys);
+        var future = Key("unknown", ShortcutChord.Command);
+        var overrides = ShortcutOverrides.Restore([], alternate: [new("showHistory", keys), new("futureCommand", future)]);
+        Assert.Null(overrides.Effective(ShortcutCommand.MostRecentTabBackward, Offered, DevicePlatform.Desktop));
+        var revised = overrides.Assigning(ShortcutCommand.NextTab, Key("]", ShortcutChord.Command | ShortcutChord.Shift),
+            Offered, DevicePlatform.Desktop);
+        Assert.Equal(future, revised.Alternates.Single(value => value.Key == "futureCommand").Value);
+        Assert.NotNull(revised.ClearingAlternate(ShortcutCommand.ShowHistory)
+            .Effective(ShortcutCommand.MostRecentTabBackward, Offered, DevicePlatform.Desktop));
+    }
+
 }

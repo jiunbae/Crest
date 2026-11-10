@@ -9,10 +9,12 @@ struct BrowserShortcutInUse: BrowserShortcutAssignmentResult {
 
     @MainActor
     func apply(
-        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand
+        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand,
+        isAlternate: Bool
     ) {
         model.pendingConflict = BrowserShortcutPendingConflict(
             command: command,
+            isAlternate: isAlternate,
             shortcut: shortcut,
             conflictingCommands: commands
         )

@@ -1,5 +1,12 @@
 import Foundation
 
+/// The responder policy of the chord that matched, independent of the other slot.
+struct BrowserShortcutMatch {
+    let command: ShortcutCommand
+    let preference: ShortcutPreference
+    let yieldsToTextEditing: Bool
+}
+
 /// The platform's side of the core's shortcut bindings.
 ///
 /// The core owns the catalog, the person's choices, conflicts, which commands
@@ -68,30 +75,52 @@ final class BrowserShortcutStore {
         core.state.shortcuts[command]?.keys.flatMap(BrowserShortcut.init(boundKeys:))
     }
 
+    func alternateShortcut(for command: ShortcutCommand) -> BrowserShortcut? {
+        core.state.shortcuts[command]?.alternate?.keys.flatMap(BrowserShortcut.init(boundKeys:))
+    }
+
+    /// The command preference is shared, but editing-key policy is per chord.
+    func match(for shortcut: BrowserShortcut, isEnabled: (ShortcutCommand) -> Bool) -> BrowserShortcutMatch? {
+        guard shortcut.isValid else { return nil }
+        for binding in core.state.shortcutBindings
+        where binding.keys == shortcut.keys || binding.alternate?.keys == shortcut.keys {
+            guard isEnabled(binding.command) else { continue }
+            if binding.keys == shortcut.keys {
+                return BrowserShortcutMatch(
+                    command: binding.command, preference: binding.preference,
+                    yieldsToTextEditing: binding.yieldsToTextEditing)
+            }
+            if let alternate = binding.alternate, alternate.keys == shortcut.keys {
+                return BrowserShortcutMatch(
+                    command: binding.command, preference: alternate.preference,
+                    yieldsToTextEditing: alternate.yieldsToTextEditing)
+            }
+        }
+        return nil
+    }
+
     func isCustomized(_ command: ShortcutCommand) -> Bool {
         core.state.shortcuts[command]?.isCustomized == true
     }
 
     /// Who answers `command`'s keys while a focused page uses them too.
     func preference(for command: ShortcutCommand) -> ShortcutPreference {
-        core.state.shortcuts[command]?.preference ?? command.defaultPreference
+        core.state.shortcuts[command].map {
+            $0.choosesPreference ? $0.preference : $0.alternate?.preference ?? $0.preference
+        } ?? command.defaultPreference
     }
 
     /// Whether a person may choose who answers `command`'s keys: a command
-    /// reserved from pages, or one bound to text editing keys, cannot.
+    /// reserved from pages, or with only text editing chords, cannot.
     func choosesPreference(_ command: ShortcutCommand) -> Bool {
-        core.state.shortcuts[command]?.choosesPreference == true
-    }
-
-    /// Whether `command` is bound to keys a focused text field edits with, so
-    /// it takes them only when the field has nothing to do with them.
-    func yieldsToTextEditing(_ command: ShortcutCommand) -> Bool {
-        core.state.shortcuts[command]?.yieldsToTextEditing == true
+        core.state.shortcuts[command].map {
+            $0.choosesPreference || $0.alternate?.choosesPreference == true
+        } == true
     }
 
     func commands(assignedTo shortcut: BrowserShortcut) -> [ShortcutCommand] {
         let keys = shortcut.keys
-        return core.state.shortcutBindings.filter { $0.keys == keys }.map(\.command)
+        return core.state.shortcutBindings.filter { $0.keys == keys || $0.alternate?.keys == keys }.map(\.command)
     }
 
     // MARK: - Actions - Changes
@@ -104,6 +133,22 @@ final class BrowserShortcutStore {
     /// Binds `shortcut` to `command`, taking it from every command that holds it.
     func reassign(_ shortcut: BrowserShortcut, to command: ShortcutCommand) -> any BrowserShortcutAssignmentResult {
         answer(ReassignShortcut(command: command, keys: shortcut.keys))
+    }
+
+    func assignAlternate(_ shortcut: BrowserShortcut, to command: ShortcutCommand)
+        -> any BrowserShortcutAssignmentResult
+    {
+        answer(AssignAlternateShortcut(command: command, keys: shortcut.keys))
+    }
+
+    func reassignAlternate(_ shortcut: BrowserShortcut, to command: ShortcutCommand)
+        -> any BrowserShortcutAssignmentResult
+    {
+        answer(ReassignAlternateShortcut(command: command, keys: shortcut.keys))
+    }
+
+    func clearAlternateShortcut(for command: ShortcutCommand) {
+        _ = answer(ClearAlternateShortcut(command: command))
     }
 
     /// Makes `preference` answer `command`'s keys while a focused page uses

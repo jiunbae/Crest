@@ -1255,6 +1255,11 @@ struct AssessDownloadRisk: Intent, DownloadIntent, Equatable, Sendable {
     let assessment: DownloadRiskAssessment
 }
 
+struct AssignAlternateShortcut: Intent, ShortcutIntent, Equatable, Sendable {
+    let command: ShortcutCommand
+    let keys: KeyCombination
+}
+
 struct AssignShortcut: Intent, ShortcutIntent, Equatable, Sendable {
     let command: ShortcutCommand
     let keys: KeyCombination
@@ -1654,6 +1659,10 @@ struct ClaimAgentTab: Intent, AgentIntent, Equatable, Sendable {
 struct CleanUpCurrentTabs: Intent, SessionIntent, Equatable, Sendable {
     let workspaceID: UUID
     let spaceID: UUID?
+}
+
+struct ClearAlternateShortcut: Intent, ShortcutIntent, Equatable, Sendable {
+    let command: ShortcutCommand
 }
 
 struct ClearCurrentTabs: Intent, SessionIntent, Equatable, Sendable {
@@ -5356,6 +5365,11 @@ struct ReadWebsiteData: Intent, Equatable, Sendable {
     let host: String?
 }
 
+struct ReassignAlternateShortcut: Intent, ShortcutIntent, Equatable, Sendable {
+    let command: ShortcutCommand
+    let keys: KeyCombination
+}
+
 struct ReassignShortcut: Intent, ShortcutIntent, Equatable, Sendable {
     let command: ShortcutCommand
     let keys: KeyCombination
@@ -6346,6 +6360,14 @@ struct ShortcutBinding: Equatable, Sendable {
     let command: ShortcutCommand
     let keys: KeyCombination?
     let isCustomized: Bool
+    let preference: ShortcutPreference
+    let choosesPreference: Bool
+    let yieldsToTextEditing: Bool
+    let alternate: ShortcutChordBinding?
+}
+
+struct ShortcutChordBinding: Equatable, Sendable {
+    let keys: KeyCombination?
     let preference: ShortcutPreference
     let choosesPreference: Bool
     let yieldsToTextEditing: Bool

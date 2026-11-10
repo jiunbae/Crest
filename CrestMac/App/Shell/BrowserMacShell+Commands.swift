@@ -62,11 +62,12 @@ extension BrowserMacShell {
         // browser workspace. Their editing and close shortcuts stay local.
         let context = windows.activeContext
         guard context != nil || windows.isQuickWindowKey else { return false }
-        if let command = application.shortcuts.command(for: event, isEnabled: canPerform) {
-            if stage.viewSeesFirst, application.shortcuts.yieldsToTextEditing(command) { return false }
-            if stage.pageSeesFirst, !runsBeforePage(command, pressed: event, shortcut: shortcut) { return false }
+        if let match = application.shortcuts.match(for: event, isEnabled: canPerform) {
+            let command = match.command
+            if stage.viewSeesFirst, match.yieldsToTextEditing { return false }
+            if stage.pageSeesFirst, !runsBeforePage(match, pressed: event, shortcut: shortcut) { return false }
             if let direction = BrowserMacCommand.of(command)?.recentTabDirection,
-                recentTabSwitcher.begin(direction: direction)
+                recentTabSwitcher.begin(direction: direction, binding: shortcut)
             {
                 return true
             }
@@ -85,8 +86,11 @@ extension BrowserMacShell {
     /// `shortcut`: its preference is Prefer Crest, or it is Use Both and this
     /// presses again keys the page kept. Any other Use Both press is one the
     /// page sees first, unless an input method is composing text there.
-    private func runsBeforePage(_ command: ShortcutCommand, pressed event: NSEvent, shortcut: BrowserShortcut) -> Bool {
-        guard let preference = application?.shortcuts.preference(for: command) else { return false }
+    private func runsBeforePage(_ match: BrowserShortcutMatch, pressed event: NSEvent, shortcut: BrowserShortcut)
+        -> Bool
+    {
+        let command = match.command
+        let preference = match.preference
         if preference.runsBeforePage { return true }
         guard preference.takesSecondPress,
             (NSApp.keyWindow?.firstResponder as? NSTextInputClient)?.hasMarkedText() != true
@@ -105,8 +109,8 @@ extension BrowserMacShell {
     func menuBarReceives(_ event: NSEvent, editMenu: NSMenu?) -> Bool {
         if pageKeptShortcut.pageLetGo(event) { return true }
         guard let application, event.type == .keyDown, let shortcut = BrowserShortcut(event: event),
-            let command = application.shortcuts.command(for: shortcut, isEnabled: canPerform),
-            application.shortcuts.yieldsToTextEditing(command)
+            let match = application.shortcuts.match(for: event, isEnabled: canPerform),
+            match.yieldsToTextEditing
         else { return false }
         if (NSApp.keyWindow?.firstResponder as? NSView)?.inputContext != nil, let editMenu,
             let item = editMenu.items.first(where: { BrowserShortcut(keyEquivalentOf: $0) == shortcut })
@@ -116,7 +120,7 @@ extension BrowserMacShell {
                 return true
             }
         }
-        perform(command)
+        perform(match.command)
         return true
     }
 

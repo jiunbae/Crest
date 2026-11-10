@@ -105,16 +105,17 @@ final class BrowserMacRecentTabSwitcher {
     /// Nothing begins while the preference is off, in a window without a
     /// list, or when the shortcut has no modifier to hold; the command then
     /// jumps at once.
-    func begin(direction: RecentTabSwitchDirection) -> Bool {
+    func begin(direction: RecentTabSwitchDirection, binding: BrowserShortcut) -> Bool {
         guard hold == nil, BrowserAppPreferenceStore.shared.showsRecentTabs, let shell, let windows = shell.windows,
             let context = windows.activeContext, let actions = windows.activeActions,
             let window = NSApp.keyWindow, let shortcuts = shell.application?.shortcuts
         else { return false }
-        let forward = shortcuts.shortcut(for: .mostRecentTab)
-        let backward = shortcuts.shortcut(for: .mostRecentTabBackward)
-        let isForward = direction == .forward
-        guard let binding = isForward ? forward : backward else { return false }
-        let other = isForward ? backward : forward
+        let otherCommand: ShortcutCommand = direction == .forward ? .mostRecentTabBackward : .mostRecentTab
+        let candidates = [shortcuts.shortcut(for: otherCommand), shortcuts.alternateShortcut(for: otherCommand)]
+            .compactMap { $0 }
+        let other = candidates.first {
+            $0.modifiers.subtracting(.shift) == binding.modifiers.subtracting(.shift)
+        }
         let items = context.browser.recentTabItems()
         guard !items.isEmpty,
             let session = RecentTabSwitcherSession(

@@ -7,6 +7,7 @@ struct BrowserShortcutCommandGroup: Equatable, Identifiable, Sendable {
 
 struct BrowserShortcutPendingConflict: Equatable, Sendable {
     let command: ShortcutCommand
+    var isAlternate = false
     let shortcut: BrowserShortcut
     let conflictingCommands: [ShortcutCommand]
 }

@@ -39,6 +39,10 @@ final class BrowserShortcutSettingsModel {
         shortcuts.shortcut(for: command)
     }
 
+    func alternateShortcut(for command: ShortcutCommand) -> BrowserShortcut? {
+        shortcuts.alternateShortcut(for: command)
+    }
+
     func isCustomized(_ command: ShortcutCommand) -> Bool {
         shortcuts.isCustomized(command)
     }
@@ -56,12 +60,15 @@ final class BrowserShortcutSettingsModel {
     }
 
     var commandGroups: [BrowserShortcutCommandGroup] {
-        let matches = shortcuts.offeredCommands.filter {
+        let matches = shortcuts.offeredCommands.filter { command in
             searchProvider.matches(
-                $0,
-                currentShortcut: shortcuts.shortcut(for: $0),
+                command,
+                currentShortcut: shortcuts.shortcut(for: command),
                 query: searchText
             )
+                || (shortcuts.alternateShortcut(for: command).map { alternate in
+                    searchProvider.matches(command, currentShortcut: alternate, query: searchText)
+                } ?? false)
         }
         return ShortcutSection.all.compactMap { section in
             let commands = matches.filter { $0.section == section }
@@ -81,23 +88,31 @@ final class BrowserShortcutSettingsModel {
 
     func record(
         _ shortcut: BrowserShortcut?,
-        for command: ShortcutCommand
+        for command: ShortcutCommand, isAlternate: Bool = false
     ) {
         guard let shortcut else {
-            shortcuts.clearShortcut(for: command)
+            if isAlternate {
+                shortcuts.clearAlternateShortcut(for: command)
+            } else {
+                shortcuts.clearShortcut(for: command)
+            }
             validationIssue = nil
             return
         }
 
-        shortcuts.assign(shortcut, to: command).apply(to: self, recording: shortcut, for: command)
+        let result =
+            isAlternate
+            ? shortcuts.assignAlternate(shortcut, to: command) : shortcuts.assign(shortcut, to: command)
+        result.apply(to: self, recording: shortcut, for: command, isAlternate: isAlternate)
     }
 
     func replacePendingConflict() {
         guard let pendingConflict else { return }
-        _ = shortcuts.reassign(
-            pendingConflict.shortcut,
-            to: pendingConflict.command
-        )
+        if pendingConflict.isAlternate {
+            _ = shortcuts.reassignAlternate(pendingConflict.shortcut, to: pendingConflict.command)
+        } else {
+            _ = shortcuts.reassign(pendingConflict.shortcut, to: pendingConflict.command)
+        }
         self.pendingConflict = nil
         validationIssue = nil
     }

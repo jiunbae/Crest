@@ -21,7 +21,11 @@ public sealed record ShortcutsChanged(IReadOnlyList<ShortcutBinding> Bindings, b
 /// with, which the command then takes only when the field has nothing to do
 /// with them.
 public sealed record ShortcutBinding(ShortcutCommand Command, KeyCombination? Keys, bool IsCustomized, ShortcutPreference Preference,
-    bool ChoosesPreference, bool YieldsToTextEditing);
+    bool ChoosesPreference, bool YieldsToTextEditing, ShortcutChordBinding? Alternate = null);
+
+/// Effective responder policy for one chord, independent of the other chord.
+public sealed record ShortcutChordBinding(KeyCombination? Keys, ShortcutPreference Preference, bool ChoosesPreference,
+    bool YieldsToTextEditing);
 
 #endregion
 

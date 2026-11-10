@@ -25,6 +25,8 @@ final class BrowserMacMenuBar: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private var actionItems: [(action: BrowserMacApplicationAction, item: NSMenuItem)] = []
     /// The menus that hold commands, whose separators follow what is offered.
     private var commandMenus: [NSMenu] = []
+    private weak var aliasMenu: NSMenu?
+    private var alternateItems: [(command: ShortcutCommand, item: NSMenuItem)] = []
     /// The Page menu, which ends with a row for each engine the shown page
     /// can move to.
     private weak var pageMenu: NSMenu?
@@ -49,6 +51,7 @@ final class BrowserMacMenuBar: NSObject, NSMenuDelegate, NSMenuItemValidation {
     func install() {
         let bar = BrowserMacMainMenu()
         bar.shell = shell
+        aliasMenu = bar.aliases
         applicationMenu(in: bar)
         for menu in ShortcutMenu.all {
             let items = submenu(String(localized: menu.title), in: bar)
@@ -196,6 +199,12 @@ final class BrowserMacMenuBar: NSObject, NSMenuDelegate, NSMenuItemValidation {
             item.keyEquivalent = shortcut.map { String($0.key.keyEquivalent.character) } ?? ""
             item.keyEquivalentModifierMask = shortcut?.modifiers.appKitModifierFlags ?? []
         }
+        for (command, item) in alternateItems {
+            let shortcut = shortcuts.alternateShortcut(for: command)
+            item.keyEquivalent = shortcut.map { String($0.key.keyEquivalent.character) } ?? ""
+            item.keyEquivalentModifierMask = shortcut?.modifiers.appKitModifierFlags ?? []
+            item.isHidden = !command.isOffered(in: state)
+        }
     }
 
     /// Ends the Page menu with a row for each registered engine the shown
@@ -270,6 +279,11 @@ final class BrowserMacMenuBar: NSObject, NSMenuDelegate, NSMenuItemValidation {
         item.representedObject = command
         menu.addItem(item)
         commandItems.append((command, item, title))
+        let alternate = NSMenuItem(title: title, action: #selector(runCommand(_:)), keyEquivalent: "")
+        alternate.target = self
+        alternate.representedObject = command
+        aliasMenu?.addItem(alternate)
+        alternateItems.append((command, alternate))
     }
 
     private func applicationItem(_ action: BrowserMacApplicationAction, in menu: NSMenu) {

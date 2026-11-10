@@ -189,12 +189,11 @@ extension ShortcutSpecialKey {
 extension BrowserShortcutStore {
     func commands(matching query: String) -> [ShortcutCommand] {
         let catalog = BrowserShortcutPresentationCatalog()
-        return offeredCommands.filter {
-            catalog.matches(
-                $0,
-                currentShortcut: shortcut(for: $0),
-                query: query
-            )
+        return offeredCommands.filter { command in
+            catalog.matches(command, currentShortcut: shortcut(for: command), query: query)
+                || (alternateShortcut(for: command).map {
+                    catalog.matches(command, currentShortcut: $0, query: query)
+                } ?? false)
         }
     }
 }

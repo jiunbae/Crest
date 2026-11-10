@@ -142,6 +142,8 @@ internal sealed class SqliteConnection : IDisposable {
         Execute("CREATE TABLE IF NOT EXISTS device_engine (id INTEGER PRIMARY KEY CHECK (id = 0), engine TEXT NOT NULL)");
         Execute("CREATE TABLE IF NOT EXISTS device_shortcut (command TEXT PRIMARY KEY, key TEXT, special INTEGER NOT NULL, "
             + "modifiers INTEGER NOT NULL)");
+        Execute("CREATE TABLE IF NOT EXISTS device_shortcut_alternate (command TEXT PRIMARY KEY, key TEXT NOT NULL, "
+            + "special INTEGER NOT NULL, modifiers INTEGER NOT NULL)");
         Execute("CREATE TABLE IF NOT EXISTS device_shortcut_preference (command TEXT PRIMARY KEY, preference TEXT NOT NULL)");
         Execute("CREATE TABLE IF NOT EXISTS device_link (id INTEGER PRIMARY KEY CHECK (id = 0), destination TEXT NOT NULL, "
             + "destination_space TEXT, peek_modifier TEXT NOT NULL, archive_policy TEXT NOT NULL)");
@@ -358,7 +360,15 @@ internal sealed class SqliteConnection : IDisposable {
             if (ShortcutPreference.Named(Sqlite.ColumnText(statement, 1)) is { } preference)
                 preferences.Add(new(Sqlite.ColumnText(statement, 0), preference));
         });
-        return ShortcutOverrides.Restore(choices, preferences);
+        var alternates = new List<KeyValuePair<string, ShortcutChord>>();
+        Rows("SELECT command, key, special, modifiers FROM device_shortcut_alternate ORDER BY command", statement => {
+            string key = Sqlite.ColumnText(statement, 1);
+            bool special = Sqlite.sqlite3_column_int(statement, 2) != 0;
+            int modifiers = Sqlite.sqlite3_column_int(statement, 3);
+            if (ShortcutChord.Usable(new(key, special, (ShortcutModifiers)modifiers)) is { } chord)
+                alternates.Add(new(Sqlite.ColumnText(statement, 0), chord));
+        });
+        return ShortcutOverrides.Restore(choices, preferences, alternates);
     }
 
     /// The link preferences, each value that does not read keeping its
@@ -617,6 +627,14 @@ internal sealed class SqliteConnection : IDisposable {
     /// left without a chord has no key, and a preference is kept by its name.
     private void WriteShortcuts(ShortcutOverrides shortcuts) {
         Execute("DELETE FROM device_shortcut");
+        Execute("DELETE FROM device_shortcut_alternate");
+        foreach (var (command, chord) in shortcuts.Alternates)
+            Insert("INSERT INTO device_shortcut_alternate(command, key, special, modifiers) VALUES(?,?,?,?)", statement => {
+                Bind(statement, 1, command);
+                Bind(statement, 2, chord.Key);
+                Checked(Sqlite.sqlite3_bind_int64(statement, 3, chord.IsSpecial ? 1 : 0));
+                Checked(Sqlite.sqlite3_bind_int64(statement, 4, chord.Modifiers));
+            });
         Execute("DELETE FROM device_shortcut_preference");
         foreach (var (command, preference) in shortcuts.Preferences)
             Insert("INSERT INTO device_shortcut_preference(command, preference) VALUES(?,?)", statement => {

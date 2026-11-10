@@ -109,7 +109,12 @@ final class BrowserMacShell {
             return self?.handleShortcut(event, at: stage) == true ? nil : event
         }
         quickWindowShortcut = BrowserMacGlobalShortcut(
-            binding: { application.shortcuts.shortcut(for: .newQuickWindow) },
+            bindings: {
+                [
+                    application.shortcuts.shortcut(for: .newQuickWindow),
+                    application.shortcuts.alternateShortcut(for: .newQuickWindow),
+                ].compactMap { $0 }
+            },
             pressed: { [weak self] in self?.quickWindowShortcutPressed() })
         quickWindowShortcut?.start()
         mouseButtons.start()

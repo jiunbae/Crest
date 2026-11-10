@@ -192,4 +192,85 @@ public sealed partial class BrowserContractsTests {
         Assert.All(cleared.Bindings, binding => Assert.False(binding.IsCustomized));
         Assert.Empty(relaunched.Send(new ResetShortcuts()).OfType<ShortcutsChanged>());
     }
+    [Fact]
+    public void AlternateChordsKeepPrimaryChoicesAndOnlyTheCollidingSlotIsReassigned() {
+        using var directory = new StorageDirectory();
+        var primary = Typed("[", ShortcutModifiers.Command | ShortcutModifiers.Shift);
+        var alternate = new KeyCombination("upArrow", true, ShortcutModifiers.Command | ShortcutModifiers.Option);
+        var spare = new KeyCombination("f12", true, ShortcutModifiers.None);
+        {
+            var (app, _, _) = DeviceApp(directory);
+            using var disposal = app;
+            app.Send(new AdoptShortcuts(null));
+            app.Send(new AssignShortcut(ShortcutCommand.PreviousTab, primary));
+            var added = Bindings(app.Send(new AssignAlternateShortcut(ShortcutCommand.PreviousTab, alternate)));
+            Assert.Equal(primary, added[ShortcutCommand.PreviousTab].Keys);
+            Assert.Equal(alternate, added[ShortcutCommand.PreviousTab].Alternate!.Keys);
+            Assert.Equal(ShortcutPreference.PreferCrest, added[ShortcutCommand.PreviousTab].Alternate!.Preference);
+            Assert.False(added[ShortcutCommand.PreviousTab].Alternate!.YieldsToTextEditing);
+            Assert.Empty(app.Send(new AssignAlternateShortcut(ShortcutCommand.PreviousTab, alternate)).OfType<ShortcutsChanged>());
+            Assert.IsType<InvalidShortcut>(Assert.Throws<Rejected>(() => app.Send(
+                new AssignAlternateShortcut(ShortcutCommand.NextTab, Typed("x", ShortcutModifiers.None)))).Rejection);
+            Assert.Equal([ShortcutCommand.PreviousTab], Assert.IsType<ShortcutInUse>(Assert.Throws<Rejected>(() =>
+                app.Send(new AssignShortcut(ShortcutCommand.NextTab, alternate))).Rejection).Commands);
+            Assert.Equal([ShortcutCommand.PreviousTab], Assert.IsType<ShortcutInUse>(Assert.Throws<Rejected>(() =>
+                app.Send(new AssignAlternateShortcut(ShortcutCommand.NextTab, primary))).Rejection).Commands);
+            app.Send(new AssignAlternateShortcut(ShortcutCommand.NextTab, spare));
+            var taken = Bindings(app.Send(new ReassignAlternateShortcut(ShortcutCommand.NextTab, alternate)));
+            Assert.Equal(primary, taken[ShortcutCommand.PreviousTab].Keys);
+            Assert.Null(taken[ShortcutCommand.PreviousTab].Alternate);
+            Assert.Equal(ShortcutCommand.NextTab.DefaultShortcut(DevicePlatform.Desktop)!.Keys, taken[ShortcutCommand.NextTab].Keys);
+            Assert.Equal(alternate, taken[ShortcutCommand.NextTab].Alternate!.Keys);
+            // Taking the other slot leaves the alternate in place.
+            app.Send(new AssignAlternateShortcut(ShortcutCommand.PreviousTab, spare));
+            var movedPrimary = Bindings(app.Send(new ReassignShortcut(ShortcutCommand.ShowHistory, primary)));
+            Assert.Null(movedPrimary[ShortcutCommand.PreviousTab].Keys);
+            Assert.Equal(spare, movedPrimary[ShortcutCommand.PreviousTab].Alternate!.Keys);
+        }
+        {
+            var (app, _, _) = DeviceApp(directory);
+            using var disposal = app;
+            var restored = Bindings(app.Send(new AdoptShortcuts(null)));
+            Assert.Null(restored[ShortcutCommand.PreviousTab].Keys);
+            Assert.Equal(spare, restored[ShortcutCommand.PreviousTab].Alternate!.Keys);
+            Assert.Equal(alternate, restored[ShortcutCommand.NextTab].Alternate!.Keys);
+            var cleared = Bindings(app.Send(new ClearAlternateShortcut(ShortcutCommand.NextTab)));
+            Assert.Null(cleared[ShortcutCommand.NextTab].Alternate);
+            Assert.Equal(ShortcutCommand.NextTab.DefaultShortcut(DevicePlatform.Desktop)!.Keys, cleared[ShortcutCommand.NextTab].Keys);
+            var reset = Bindings(app.Send(new ResetShortcut(ShortcutCommand.PreviousTab)));
+            Assert.Null(reset[ShortcutCommand.PreviousTab].Alternate);
+            Assert.False(reset[ShortcutCommand.PreviousTab].IsCustomized);
+            app.Send(new ResetShortcuts());
+        }
+        var (final, _, _) = DeviceApp(directory);
+        using var finalDisposal = final;
+        var resetAll = Assert.Single(final.Send(new AdoptShortcuts(null)).OfType<ShortcutsChanged>());
+        Assert.False(resetAll.IsCustomized);
+        Assert.All(resetAll.Bindings, binding => Assert.Null(binding.Alternate));
+    }
+
+    [Fact]
+    public void AddingAnAlternateTablePreservesExistingPrimaryRows() {
+        using var directory = new StorageDirectory();
+        var primary = Typed("[", ShortcutModifiers.Command | ShortcutModifiers.Shift);
+        {
+            var (app, _, _) = DeviceApp(directory);
+            using var disposal = app;
+            app.Send(new AdoptShortcuts(null));
+            app.Send(new AssignShortcut(ShortcutCommand.PreviousTab, primary));
+        }
+        // Simulate the schema of a release without alternate support.
+        Assert.Equal(Sqlite.Ok, Sqlite.sqlite3_open_v2(directory.File, out var connection, Sqlite.OpenReadWrite, null));
+        try {
+            Assert.Equal(Sqlite.Ok, Sqlite.sqlite3_exec(connection, "DROP TABLE device_shortcut_alternate", 0, 0, 0));
+        } finally {
+            Sqlite.sqlite3_close_v2(connection);
+        }
+        var (reopened, _, _) = DeviceApp(directory);
+        using var reopenedDisposal = reopened;
+        var restored = Bindings(reopened.Send(new AdoptShortcuts(null)));
+        Assert.Equal(primary, restored[ShortcutCommand.PreviousTab].Keys);
+        Assert.Null(restored[ShortcutCommand.PreviousTab].Alternate);
+    }
+
 }

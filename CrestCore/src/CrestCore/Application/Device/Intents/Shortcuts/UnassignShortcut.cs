@@ -3,7 +3,7 @@ using CrestCore.Domain;
 
 namespace CrestCore.Contracts;
 
-/// Leaves `Command` without a chord.
+/// Clears the primary chord of `Command`, preserving its optional alternate.
 public sealed record UnassignShortcut(ShortcutCommand Command) : ShortcutIntent {
     #region Actions - Device
 

@@ -5,5 +5,6 @@ protocol BrowserShortcutAssignmentResult: Sendable {
     /// Shows the answer for `shortcut`, recorded for `command`, in `model`.
     @MainActor
     func apply(
-        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand)
+        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand,
+        isAlternate: Bool)
 }

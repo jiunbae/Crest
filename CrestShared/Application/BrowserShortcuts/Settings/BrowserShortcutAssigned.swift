@@ -4,7 +4,8 @@ struct BrowserShortcutAssigned: BrowserShortcutAssignmentResult {
 
     @MainActor
     func apply(
-        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand
+        to model: BrowserShortcutSettingsModel, recording shortcut: BrowserShortcut, for command: ShortcutCommand,
+        isAlternate: Bool
     ) {
         model.validationIssue = nil
     }

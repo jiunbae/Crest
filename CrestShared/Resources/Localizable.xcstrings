@@ -2144,6 +2144,12 @@
     "Already saved" : {
 
     },
+    "Alternate" : {
+
+    },
+    "Alternate shortcut for %@" : {
+
+    },
     "Also hides cookie notices and other annoyances. A few sites may not work." : {
 
     },
@@ -3466,6 +3472,9 @@
           }
         }
       }
+    },
+    "Clear Alternate Shortcut" : {
+
     },
     "Clear browsing data" : {
 
