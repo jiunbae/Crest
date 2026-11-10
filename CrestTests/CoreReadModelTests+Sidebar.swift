@@ -445,7 +445,7 @@ enum SidebarReads {
         _ = (configuration.displayBranding, configuration.isAvailableForDisplay)
         _ = BrowserSidebarSelection.showsSelected(.folder(folder.id), in: context)
         _ = interaction.editingFolderRequest
-        _ = (configuration.shownFolderTabID, configuration.residencyRevision)
+        _ = (configuration.shownFolderTabID, configuration.residentFolderTabIDs)
         return configuration
     }
 
