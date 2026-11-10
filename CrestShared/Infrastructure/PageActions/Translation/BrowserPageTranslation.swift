@@ -37,7 +37,7 @@ final class BrowserPageTranslation {
     /// page no longer throws away the questions already asked, so a person
     /// moving between pages pays for one scan instead of a fresh partial one
     /// on every visit.
-    private static var installedLanguageScans: [String: Task<Set<String>, Never>] = [:]
+    private static var installedLanguageScans: [String: (id: UUID, task: Task<Set<String>, Never>)] = [:]
     /// Advances whenever installed models may have changed, which makes every
     /// page check again and drops answers from scans already under way.
     private static var installedLanguageGeneration = 0
@@ -245,6 +245,8 @@ final class BrowserPageTranslation {
 
     func refreshInstalledLanguages(force: Bool = false) async {
         await loadLanguages()
+        // A page already left keeps any scan it joined, but starts none.
+        guard !Task.isCancelled else { return }
         // The shared answer, while fresh, replaces asking Apple again; it
         // expires so models changed outside Crest appear on a later visit.
         let generation = Self.installedLanguageGeneration
@@ -260,8 +262,11 @@ final class BrowserPageTranslation {
         let scanKey = "\(cacheKey)|\(generation)"
         let scan: Task<Set<String>, Never>
         if !force, let running = Self.installedLanguageScans[scanKey] {
-            scan = running
+            scan = running.task
         } else {
+            // A forced scan replaces the one under way, whose answer is older.
+            Self.installedLanguageScans[scanKey]?.task.cancel()
+            let scanID = UUID()
             let identifiers = languages.map(\.minimalIdentifier)
             // Apple reports installed pairs. A positive result confirms both
             // languages; unsupported/supported pairs do not prove either is absent.
@@ -270,16 +275,21 @@ final class BrowserPageTranslation {
             let supported = supportedLanguages
             scan = Task {
                 let installed = await Self.installedLanguages(in: pairs, supported: supported)
-                if generation == Self.installedLanguageGeneration {
+                // Only the scan still registered for this pair speaks for it;
+                // a replaced or cancelled one returns a partial, older answer.
+                guard Self.installedLanguageScans[scanKey]?.id == scanID else { return installed }
+                Self.installedLanguageScans[scanKey] = nil
+                if !Task.isCancelled, generation == Self.installedLanguageGeneration {
                     Self.installedLanguageCache[cacheKey] = (installed, .now)
                 }
-                Self.installedLanguageScans[scanKey] = nil
                 return installed
             }
-            Self.installedLanguageScans[scanKey] = scan
+            Self.installedLanguageScans[scanKey] = (scanID, scan)
         }
         let installed = await scan.value
-        guard !Task.isCancelled, check == "\(languageStatusID)|\(Self.installedLanguageGeneration)" else { return }
+        guard !Task.isCancelled, !scan.isCancelled,
+            check == "\(languageStatusID)|\(Self.installedLanguageGeneration)"
+        else { return }
         if installedLanguageIDs != installed { installedLanguageIDs = installed }
     }
 
@@ -421,7 +431,7 @@ final class BrowserPageTranslation {
                 downloadRevision &+= 1
                 // A finished download can install a model any page lists.
                 Self.installedLanguageCache.removeAll()
-                Self.installedLanguageScans.values.forEach { $0.cancel() }
+                for scan in Self.installedLanguageScans.values { scan.task.cancel() }
                 Self.installedLanguageScans.removeAll()
                 Self.installedLanguageGeneration &+= 1
             }
