@@ -109,8 +109,12 @@ final class BrowserPageTranslation {
             isDismissed = false
             isManuallyPresented = false
         }
-        self.automaticallyTranslates = automaticallyTranslates
-        self.offersTranslation = offersTranslation
+        // Each page visit reapplies the same preferences; an equal assignment
+        // would still redraw the translation toolbar.
+        if self.automaticallyTranslates != automaticallyTranslates {
+            self.automaticallyTranslates = automaticallyTranslates
+        }
+        if self.offersTranslation != offersTranslation { self.offersTranslation = offersTranslation }
     }
     var targetName: String { languageName(targetID) }
 
@@ -249,7 +253,8 @@ final class BrowserPageTranslation {
         if !force, let cached = Self.installedLanguageCache[cacheKey],
             cached.checkedAt.duration(to: .now) < Self.installedLanguageCacheLifetime
         {
-            installedLanguageIDs = cached.ids
+            // Assigning an equal set still invalidates every view reading it.
+            if installedLanguageIDs != cached.ids { installedLanguageIDs = cached.ids }
             return
         }
         let scanKey = "\(cacheKey)|\(generation)"
@@ -275,7 +280,7 @@ final class BrowserPageTranslation {
         }
         let installed = await scan.value
         guard !Task.isCancelled, check == "\(languageStatusID)|\(Self.installedLanguageGeneration)" else { return }
-        installedLanguageIDs = installed
+        if installedLanguageIDs != installed { installedLanguageIDs = installed }
     }
 
     /// Asks Apple about each pair in turn, pausing between questions. Apple
