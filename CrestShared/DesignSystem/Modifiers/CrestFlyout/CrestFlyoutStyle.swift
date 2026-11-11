@@ -31,7 +31,10 @@ struct CrestFlyoutStyle: ViewModifier {
     func body(content: Content) -> some View {
         let labels =
             content
-            .foregroundStyle(.primary)
+            // `Color.primary`, not the hierarchical `.primary`: that one is
+            // the first level of the style inherited from the presenting view,
+            // which is the Space's ink, and keeps a light Space's dark labels.
+            .foregroundStyle(Color.primary)
             .tint(CrestBrandTheme.accent(Self.colorScheme))
             .environment(\.colorScheme, Self.colorScheme)
         if let inWindowShape {
