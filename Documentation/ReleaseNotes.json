@@ -5301,6 +5301,10 @@
     "readable-site-controls-on-light-spaces": {
       "category": "fixed",
       "message": "Site Controls and other popovers keep light, readable text in a Space with a light color"
+    },
+    "readable-start-page-title-on-dark-spaces": {
+      "category": "fixed",
+      "message": "On Mac, the Start Page title reads clearly over a dark Space"
     }
   }
 }

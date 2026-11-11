@@ -16,7 +16,10 @@ struct BrowserStartPageHeader: View {
     @ViewBuilder
     var body: some View {
         if let colorScheme {
+            // `Color.primary` resolves in this scheme; the hierarchical
+            // `.primary` would keep an ink inherited from around the page.
             content
+                .foregroundStyle(Color.primary)
                 .environment(\.colorScheme, colorScheme)
         } else {
             content
