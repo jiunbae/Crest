@@ -6,6 +6,8 @@ import SwiftUI
 /// The three sit in a `Group` so the enclosing stack spaces them itself, which
 /// is what keeps the header's rhythm the same as the gap to the palette below.
 struct BrowserStartPageHeader: View {
+    // MARK: - Variables
+
     let isPrivateBrowsing: Bool
     let layout: BrowserStartPageLayout
     /// The appearance the text reads its tone from. `nil` inherits the
@@ -16,12 +18,17 @@ struct BrowserStartPageHeader: View {
     @ViewBuilder
     var body: some View {
         if let colorScheme {
+            // `Color.primary` resolves in this scheme; the hierarchical
+            // `.primary` would keep an ink inherited from around the page.
             content
+                .foregroundStyle(Color.primary)
                 .environment(\.colorScheme, colorScheme)
         } else {
             content
         }
     }
+
+    // MARK: - Actions - Drawing
 
     @ViewBuilder
     private var content: some View {
