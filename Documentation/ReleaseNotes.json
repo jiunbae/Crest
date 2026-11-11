@@ -5265,6 +5265,10 @@
     "chromium-pages-load-after-157": {
       "category": "fixed",
       "message": "On Mac, pages in Chromium load again instead of stopping with \"This page stopped responding\" after updating to 0.8.215."
+    },
+    "readable-site-controls-on-light-spaces": {
+      "category": "fixed",
+      "message": "Site Controls and other popovers keep light, readable text in a Space with a light color"
     }
   }
 }
