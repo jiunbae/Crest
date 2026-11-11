@@ -5261,6 +5261,10 @@
     "lighter-tab-switch-redraws": {
       "category": "improved",
       "message": "Switch tabs faster by redrawing only the parts of the sidebar that change"
+    },
+    "steadier-translation-checks": {
+      "category": "improved",
+      "message": "Switch tabs and Spaces faster on pages offered for translation"
     }
   }
 }
