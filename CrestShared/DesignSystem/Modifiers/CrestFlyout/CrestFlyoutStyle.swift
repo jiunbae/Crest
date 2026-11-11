@@ -27,11 +27,16 @@ struct CrestFlyoutStyle: ViewModifier {
     /// flyout, whose presentation fills its own.
     let inWindowShape: AnyShape?
 
+    // MARK: - Actions - Drawing
+
     @ViewBuilder
     func body(content: Content) -> some View {
         let labels =
             content
-            .foregroundStyle(.primary)
+            // `Color.primary`, not the hierarchical `.primary`: that one is
+            // the first level of the style inherited from the presenting view,
+            // which is the Space's ink, and keeps a light Space's dark labels.
+            .foregroundStyle(Color.primary)
             .tint(CrestBrandTheme.accent(Self.colorScheme))
             .environment(\.colorScheme, Self.colorScheme)
         if let inWindowShape {
@@ -42,8 +47,6 @@ struct CrestFlyoutStyle: ViewModifier {
                 .preferredColorScheme(Self.colorScheme)
         }
     }
-
-    // MARK: - Actions - Drawing
 
     private static func surface(in shape: some Shape) -> some View {
         shape
