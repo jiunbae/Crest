@@ -285,7 +285,10 @@ struct BrowserCommandActions: BrowserNumberedSelectionPerformer {
     /// Edits the shown tab's address, or puts the editor away when it is
     /// already showing, as pressing its keys again does.
     func openLocation() {
-        chrome.toggleLocation(browser.shownTab?.url ?? "")
+        // The page's own address follows moves within its document, such as
+        // a web app's routes after `#`, which the tab's recorded address
+        // leaves out; the editor starts from what the sidebar field shows.
+        chrome.toggleLocation(shownPage?.live.displayURL?.absoluteString ?? browser.shownTab?.url ?? "")
     }
 
     /// Opens local documents as ordinary tabs in the Space on screen.
