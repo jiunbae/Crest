@@ -26,18 +26,20 @@ struct BrowserMacWindowKind: Hashable {
         name: "browser", title: ProductIdentity.name, styleMask: browsingStyle, hidesTitle: true,
         contentSize: browserContentSize,
         minimumContentSize: browserMinimumContentSize,
-        savesFrame: true, hasWindowModel: true, hasPageRow: true)
+        sizingOptions: [], savesFrame: true, hasWindowModel: true, hasPageRow: true)
     /// A browser window over a torn-off tab's own workspace, placed where the
     /// tab was dropped and never kept.
     static let temporary = BrowserMacWindowKind(
         name: "temporary", title: ProductIdentity.name, styleMask: browsingStyle, hidesTitle: true,
         contentSize: browserContentSize,
         minimumContentSize: browserMinimumContentSize,
-        hasWindowModel: true, hasPageRow: true)
+        sizingOptions: [], hasWindowModel: true, hasPageRow: true)
     /// The one private browsing window.
     static let `private` = BrowserMacWindowKind(
         name: "private", title: String(localized: "Private Browsing"), styleMask: browsingStyle, hidesTitle: true,
-        contentSize: CGSize(width: 1200, height: 820), hasPageRow: true, isSingleton: true)
+        contentSize: CGSize(width: 1200, height: 820),
+        minimumContentSize: browserMinimumContentSize,
+        sizingOptions: [], hasPageRow: true, isSingleton: true)
     /// A Quick Window, which shows one page of a Space.
     static let quick = BrowserMacWindowKind(
         name: "quick", title: String(localized: "Quick Window"), styleMask: browsingStyle, hidesTitle: true,
@@ -171,7 +173,32 @@ struct BrowserMacWindowKind: Hashable {
         let controller = NSHostingController(rootView: content)
         if let sizingOptions { controller.sizingOptions = sizingOptions }
         window.contentViewController = controller
+        // A controller that sizes the window from its content needs the
+        // window to stay as it was; only a window sized by AppKit takes the
+        // engine, which then switches no content sizing on.
+        if controller.sizingOptions.isEmpty { Self.engageLayoutEngine(in: controller.view) }
         window.setContentSize(contentSize)
+    }
+
+    /// A window none of whose views uses constraints has no Auto Layout
+    /// engine, and AppKit then asks every view in it whether it needs one on
+    /// each layout pass after a view joins the window: a walk over the
+    /// sidebar, every page and its engine's views that each new or newly
+    /// loaded tab paid for. One hidden, constrained view gives the window its
+    /// engine from the start, which ends those walks; it constrains nothing
+    /// but itself, so every other view keeps its frame-based layout.
+    private static func engageLayoutEngine(in view: NSView) {
+        let anchor = NSView()
+        anchor.translatesAutoresizingMaskIntoConstraints = false
+        anchor.isHidden = true
+        anchor.setAccessibilityElement(false)
+        view.addSubview(anchor)
+        NSLayoutConstraint.activate([
+            anchor.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            anchor.topAnchor.constraint(equalTo: view.topAnchor),
+            anchor.widthAnchor.constraint(equalToConstant: 0),
+            anchor.heightAnchor.constraint(equalToConstant: 0),
+        ])
     }
 }
 

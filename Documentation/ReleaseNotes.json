@@ -5293,6 +5293,10 @@
     "location-keeps-page-route": {
       "category": "fixed",
       "message": "On Mac, the address you open with Command-L includes the page's current route after #, so copying it reopens the same view"
+    },
+    "faster-new-and-first-shown-tabs": {
+      "category": "improved",
+      "message": "On Mac, new tabs and tabs you open for the first time appear faster"
     }
   }
 }

@@ -24,19 +24,26 @@ struct SpaceSidebarAddressBand: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        BrowserSidebarAddressField(configuration: addressConfiguration) {
-            if let siteControl {
+        // Found once: each lookup reads the pool's observed residency, and
+        // every control here asks about the same page.
+        let page = displayedPage
+        let secure = isSecure(page)
+        let control = siteControl(page)
+        return BrowserSidebarAddressField(
+            configuration: addressConfiguration(page: page, isSecure: secure, hasActiveSite: control != nil)
+        ) {
+            if let control {
                 BrowserAddressSecurityButton(
-                    page: siteControl.page,
-                    isSecure: isSecure
+                    page: control.page,
+                    isSecure: secure
                 )
             }
         } trailingAccessory: {
-            if let siteControl {
-                if let copyURLPage {
+            if let control {
+                if let copyURLPage = copyURLPage(page) {
                     BrowserAddressCopyURLButton(page: copyURLPage)
                 }
-                BrowserSiteControlButton(configuration: siteControl)
+                BrowserSiteControlButton(configuration: control)
             }
         }
         .contentTransition(.opacity)
@@ -48,16 +55,18 @@ struct SpaceSidebarAddressBand: View {
 
     }
 
-    private var addressConfiguration: BrowserSidebarAddressFieldConfiguration {
+    private func addressConfiguration(
+        page: BrowserPage?, isSecure: Bool, hasActiveSite: Bool
+    ) -> BrowserSidebarAddressFieldConfiguration {
         BrowserSidebarAddressFieldConfiguration(
             text: address,
             isEditing: isAddressEditing,
             focusRequest: addressFocusRequest,
             isSecure: isSecure,
-            progress: displayedPage?.estimatedProgress ?? 0,
-            isLoading: displayedPage?.live.isLoading == true,
-            hasResidentPage: displayedPage != nil,
-            hasActiveSite: siteControl != nil,
+            progress: page?.estimatedProgress ?? 0,
+            isLoading: page?.live.isLoading == true,
+            hasResidentPage: page != nil,
+            hasActiveSite: hasActiveSite,
             capabilities: capabilities,
             activate: activateAddress,
             submit: submitAddress,
@@ -80,22 +89,22 @@ struct SpaceSidebarAddressBand: View {
         return pages.activePage(matching: assignment)
     }
 
-    private var isSecure: Bool {
-        if let page = displayedPage { return page.live.security.isSecure }
+    private func isSecure(_ page: BrowserPage?) -> Bool {
+        if let page { return page.live.security.isSecure }
         return selectedTab?.url.flatMap(URL.init(string:))?.scheme?.lowercased() == "https"
     }
 
     /// The page the Copy URL button copies, while the person turned the
     /// button on and the page has an address to copy.
-    private var copyURLPage: BrowserPage? {
+    private func copyURLPage(_ page: BrowserPage?) -> BrowserPage? {
         guard BrowserDeviceAppearanceStore.shared.address.showsCopyURLButton,
-            let page = displayedPage, page.live.documentURL != nil
+            let page, page.live.documentURL != nil
         else { return nil }
         return page
     }
 
-    private var siteControl: BrowserSiteControlConfiguration? {
-        guard offersSiteControls, let page = displayedPage, page.live.displayURL != nil else {
+    private func siteControl(_ page: BrowserPage?) -> BrowserSiteControlConfiguration? {
+        guard offersSiteControls, let page, page.live.displayURL != nil else {
             return nil
         }
         return BrowserSiteControlConfiguration(

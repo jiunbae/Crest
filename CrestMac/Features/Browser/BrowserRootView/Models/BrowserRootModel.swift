@@ -218,7 +218,9 @@ extension BrowserRootModel {
     /// Space's page never replaces what the field holds.
     func synchronizePageMetadata() {
         guard !isAddressEditing, !selectedSpaceIsLocked, let page = selectedPage else { return }
-        address = (page.live.displayURL ?? browser.shownTab?.address)?.absoluteString ?? ""
+        let shown = (page.live.displayURL ?? browser.shownTab?.address)?.absoluteString ?? ""
+        // An equal write still redraws everything that reads the address.
+        if address != shown { address = shown }
     }
 
 }
@@ -318,7 +320,12 @@ extension BrowserRootModel {
     private func showAddressAtOnce(_ value: String) {
         var transaction = Transaction()
         transaction.disablesAnimations = true
-        withTransaction(transaction) { address = value }
+        // The page's own address follows moves within its document that the
+        // tab's leaves out, so the switch shows what the page settles on
+        // rather than the tab's address and then the page's a moment later.
+        let shown = value.isEmpty ? value : selectedPage?.live.displayURL?.absoluteString ?? value
+        guard address != shown else { return }
+        withTransaction(transaction) { address = shown }
     }
 
     func handleAuxiliaryMouseAction(
